@@ -2,119 +2,117 @@
 
 from __future__ import annotations
 
-import logging
 from colorsys import rgb_to_hsv
+import logging
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
 from src.models.palette import Palette, PaletteColor
+from src.utils.labels import palette_label
 
 LOGGER = logging.getLogger(__name__)
 
 
 class LegendExporter:
-    """Render a printable color-number legend."""
+    """Render a clean image-specific color legend."""
 
     def export(self, palette: Palette, output_path: Path, dpi: int = 180) -> Path:
-        """Write a PNG legend page."""
         output_path.parent.mkdir(parents=True, exist_ok=True)
         px_per_mm = dpi / 25.4
         width_px = round(210 * px_per_mm)
         margin_px = round(15 * px_per_mm)
-        row_height_px = round(10 * px_per_mm)
-        header_height_px = round(18 * px_per_mm)
-        height_px = max(round(120 * px_per_mm), margin_px * 2 + header_height_px + row_height_px * len(palette.colors))
+        title_height = round(18 * px_per_mm)
+        row_height = round(8.8 * px_per_mm)
+        table_width = width_px - (margin_px * 2)
+        height_px = margin_px * 2 + title_height + row_height * (len(palette.colors) + 1)
         image = Image.new("RGB", (width_px, height_px), "white")
         draw = ImageDraw.Draw(image)
-        title_font = _load_font(26)
+        title_font = _load_font(28)
         header_font = _load_font(18)
         body_font = _load_font(16)
-        x_number = margin_px
-        x_swatch = margin_px + round(28 * px_per_mm)
-        x_color = margin_px + round(50 * px_per_mm)
         y = margin_px
-        draw.text((x_number, y), "Color Legend", fill=(17, 17, 17), font=title_font)
-        y += header_height_px
-        draw.text((x_number, y), "Number", fill=(17, 17, 17), font=header_font)
-        draw.text((x_swatch, y), "Color", fill=(17, 17, 17), font=header_font)
-        draw.text((x_color, y), "Name / RGB", fill=(17, 17, 17), font=header_font)
-        y += round(8 * px_per_mm)
-        draw.line((margin_px, y, width_px - margin_px, y), fill=(70, 70, 70), width=2)
-        y += round(3 * px_per_mm)
+        draw.text((margin_px, y), "Color Legend", fill=(17, 17, 17), font=title_font)
+        y += title_height
+        col_label = margin_px
+        col_swatch = margin_px + round(table_width * 0.22)
+        col_name = margin_px + round(table_width * 0.46)
+        col_end = margin_px + table_width
+        self._row_border(draw, margin_px, y, col_end, row_height)
+        draw.text((col_label + 10, y + 10), "Code", fill=(17, 17, 17), font=header_font)
+        draw.text((col_swatch + 10, y + 10), "Reference Color", fill=(17, 17, 17), font=header_font)
+        draw.text((col_name + 10, y + 10), "Color Name", fill=(17, 17, 17), font=header_font)
+        y += row_height
         for color in palette.colors:
-            self._draw_row(draw, color, x_number, x_swatch, x_color, y, row_height_px, body_font)
-            y += row_height_px
+            self._draw_color_row(draw, color, col_label, col_swatch, col_name, col_end, y, row_height, body_font)
+            y += row_height
         image.save(output_path)
         LOGGER.info("Wrote legend PNG: %s", output_path)
         return output_path
 
     @staticmethod
-    def _draw_row(
+    def _draw_color_row(
         draw: ImageDraw.ImageDraw,
         color: PaletteColor,
-        x_number: int,
-        x_swatch: int,
-        x_color: int,
+        col_label: int,
+        col_swatch: int,
+        col_name: int,
+        col_end: int,
         y: int,
         row_height: int,
         font: ImageFont.ImageFont,
     ) -> None:
-        swatch_size = max(18, row_height - 12)
-        rgb_text = f"{color_name(color.rgb)}  RGB {color.rgb[0]}, {color.rgb[1]}, {color.rgb[2]}"
-        draw.text((x_number, y + 4), str(color.number), fill=(17, 17, 17), font=font)
+        LegendExporter._row_border(draw, col_label, y, col_end, row_height)
+        swatch_size = row_height - 16
+        swatch_y = y + 8
+        draw.text((col_label + 18, y + 12), palette_label(color.number), fill=(17, 17, 17), font=font)
         draw.rectangle(
-            (x_swatch, y + 3, x_swatch + swatch_size, y + 3 + swatch_size),
+            (col_swatch + 12, swatch_y, col_swatch + 12 + swatch_size, swatch_y + swatch_size),
             fill=color.rgb,
-            outline=(40, 40, 40),
-            width=1,
+            outline=(17, 17, 17),
+            width=2,
         )
-        draw.text((x_color, y + 4), rgb_text, fill=(17, 17, 17), font=font)
+        draw.text((col_name + 12, y + 12), color_name(color.rgb), fill=(17, 17, 17), font=font)
+
+    @staticmethod
+    def _row_border(draw: ImageDraw.ImageDraw, x0: int, y: int, x1: int, row_height: int) -> None:
+        draw.rectangle((x0, y, x1, y + row_height), outline=(35, 35, 35), width=2)
+        draw.line((x0 + round((x1 - x0) * 0.22), y, x0 + round((x1 - x0) * 0.22), y + row_height), fill=(35, 35, 35), width=2)
+        draw.line((x0 + round((x1 - x0) * 0.46), y, x0 + round((x1 - x0) * 0.46), y + row_height), fill=(35, 35, 35), width=2)
 
 
 def color_name(rgb: tuple[int, int, int]) -> str:
-    """Return a practical color family name for the legend."""
-    red, green, blue = rgb
-    hue, saturation, value = rgb_to_hsv(red / 255, green / 255, blue / 255)
-    hue_degrees = hue * 360
+    r, g, b = rgb
+    hue, saturation, value = rgb_to_hsv(r / 255, g / 255, b / 255)
+    hue *= 360
     if value < 0.18:
         return "Black"
-    if value > 0.88 and saturation < 0.12:
+    if value > 0.9 and saturation < 0.12:
         return "White"
-    if saturation < 0.12:
+    if saturation < 0.14:
         if value < 0.38:
             return "Dark Gray"
         if value > 0.72:
             return "Light Gray"
         return "Gray"
-    tone = _tone(value)
-    if hue_degrees < 15 or hue_degrees >= 345:
+    tone = "Dark " if value < 0.32 else "Light " if value > 0.78 else ""
+    if hue < 15 or hue >= 345:
         family = "Red"
-    elif hue_degrees < 38:
+    elif hue < 38:
         family = "Orange"
-    elif hue_degrees < 65:
+    elif hue < 65:
         family = "Yellow"
-    elif hue_degrees < 155:
+    elif hue < 155:
         family = "Green"
-    elif hue_degrees < 195:
+    elif hue < 195:
         family = "Teal"
-    elif hue_degrees < 245:
+    elif hue < 245:
         family = "Blue"
-    elif hue_degrees < 285:
-        return "Purple"
-    elif hue_degrees < 345:
-        family = "Rose"
+    elif hue < 285:
+        family = "Purple"
     else:
-        family = "Color"
-    return f"{tone} {family}".strip()
-
-
-def _tone(value: float) -> str:
-    if value < 0.32:
-        return "Dark"
-    if value > 0.78:
-        return "Light"
-    return ""
+        family = "Pink"
+    return f"{tone}{family}"
 
 
 def _load_font(size_px: int) -> ImageFont.ImageFont:

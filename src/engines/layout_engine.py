@@ -11,14 +11,14 @@ LOGGER = logging.getLogger(__name__)
 
 
 class LayoutEngine:
-    """Calculate page geometry and circle coordinates."""
+    """Calculate page geometry using physical circle size."""
 
     def __init__(self, page_settings: PageSettings, mosaic_settings: MosaicSettings) -> None:
         self.page_settings = page_settings.normalized()
         self.mosaic_settings = mosaic_settings
 
     def calculate(self) -> Layout:
-        """Calculate rows and columns that fit inside the configured margins."""
+        """Calculate rows and columns that fit inside the configured page."""
         margins = self.page_settings.margins
         page = Page(
             width_mm=self.page_settings.width_mm,
@@ -31,11 +31,16 @@ class LayoutEngine:
         usable_width = page.width_mm - page.margin_left_mm - page.margin_right_mm
         usable_height = page.height_mm - page.margin_top_mm - page.margin_bottom_mm
         pitch = self.mosaic_settings.pitch_mm
-        columns = int((usable_width + self.mosaic_settings.circle_gap_mm) // pitch)
-        rows = int((usable_height + self.mosaic_settings.circle_gap_mm) // pitch)
+        columns = max(1, int((usable_width + self.mosaic_settings.circle_gap_mm) // pitch))
+        rows = max(1, int((usable_height + self.mosaic_settings.circle_gap_mm) // pitch))
         if columns <= 0 or rows <= 0:
             raise ValueError("Page, margins, and circle settings leave no printable grid area.")
-        LOGGER.info("Calculated layout: %s columns x %s rows", columns, rows)
+        LOGGER.info(
+            "Calculated %s layout: %s columns x %s rows",
+            self.page_settings.name,
+            columns,
+            rows,
+        )
         return Layout(
             page=page,
             rows=rows,

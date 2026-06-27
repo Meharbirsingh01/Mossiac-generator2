@@ -1,31 +1,38 @@
-"""Palette models."""
+"""Palette data model."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-
 from src.models.circle import RgbColor
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class PaletteColor:
-    """A numbered color used by a mosaic project."""
-
+    """A single colour entry in the palette."""
     number: int
     rgb: RgbColor
-    hex_value: str
-    frequency: int
+    hex_color: str
+    frequency: int = 0
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class Palette:
-    """Numbered palette generated from an input image."""
-
+    """Ordered collection of palette colours."""
     colors: tuple[PaletteColor, ...]
 
     def number_for_rgb(self, rgb: RgbColor) -> int:
-        """Return the legend number for a palette color."""
+        """Return the pen number for a given RGB value, or -1 if not found."""
         for color in self.colors:
             if color.rgb == rgb:
                 return color.number
-        raise KeyError(f"RGB color is not in palette: {rgb}")
+        return -1
+
+    def color_for_number(self, number: int) -> PaletteColor | None:
+        for color in self.colors:
+            if color.number == number:
+                return color
+        return None
+
+    @property
+    def count(self) -> int:
+        return len(self.colors)
